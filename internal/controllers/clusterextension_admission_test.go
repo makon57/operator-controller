@@ -235,6 +235,52 @@ func TestClusterExtensionAdmissionInstallNamespace(t *testing.T) {
 	}
 }
 
+func TestClusterExtensionAdmissionServiceAccount(t *testing.T) {
+	tooLongError := "spec.packageName: Too long: may not be longer than 48"
+	regexMismatchError := "spec.serviceAccount in body should match"
+
+	testCases := []struct {
+		name           string
+		serviceAccount string
+		errMsg         string
+	}{
+		{"no service account name", "", regexMismatchError},
+		{"long service account name", "this-is-a-really-long-service-account-name-that-is-greater-than-48-characters", tooLongError},
+		{"just alphanumeric", "justalphanumberic1", ""},
+		{"hypen-separated", "hyphenated-name", ""},
+		{"no service account", "", regexMismatchError},
+		{"dot-separated", "dotted.name", regexMismatchError},
+		{"spaces", "spaces spaces", regexMismatchError},
+		{"capitalized", "Capitalized", regexMismatchError},
+		{"camel case", "camelCase", regexMismatchError},
+		{"invalid characters", "many/invalid$characters+in_name", regexMismatchError},
+		{"starts with hyphen", "-start-with-hyphen", regexMismatchError},
+		{"ends with hyphen", "end-with-hyphen-", regexMismatchError},
+		{"starts with period", ".start-with-period", regexMismatchError},
+		{"ends with period", "end-with-period.", regexMismatchError},
+	}
+
+	t.Parallel()
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cl := newClient(t)
+			err := cl.Create(context.Background(), buildClusterExtension(ocv1alpha1.ClusterExtensionSpec{
+				PackageName:      "package",
+				InstallNamespace: "default",
+				ServiceAccount:   tc.serviceAccount,
+			}))
+			if tc.errMsg == "" {
+				require.NoError(t, err, "unexpected error for service account name %q: %w", tc.serviceAccount, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errMsg)
+			}
+		})
+	}
+}
+
 func buildClusterExtension(spec ocv1alpha1.ClusterExtensionSpec) *ocv1alpha1.ClusterExtension {
 	return &ocv1alpha1.ClusterExtension{
 		ObjectMeta: metav1.ObjectMeta{
